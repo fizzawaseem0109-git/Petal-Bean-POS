@@ -1,0 +1,17 @@
+{
+  "name": "petal-and-bean-pos",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Petal & Bean POS — MERN stack (MongoDB, Express, React, Node)",
+  "scripts": {
+    "setup": "npm install && node scripts/setup.js",
+    "dev": "concurrently -k -n api,web -c magenta,cyan \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "build": "npm --prefix client run build",
+    "start": "npm --prefix server start",
+    "seed": "npm --prefix server run seed",
+    "seed:reset": "npm --prefix server run seed:reset",
+    "test": "npm --prefix server test"
+  },
+  "devDependencies": { "concurrently": "^9.0.0" }
+}
