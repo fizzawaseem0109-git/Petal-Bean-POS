@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import { PosProvider, usePos } from './context/PosContext.jsx';
 import { useCart } from './hooks/useCart.js';
 import LoginScreen from './components/LoginScreen.jsx';
-import TopBar from './components/TopBar.jsx';
+import Sidebar from './components/Sidebar.jsx';
 import SellView from './components/SellView.jsx';
 import CustomersView from './components/CustomersView.jsx';
 import HistoryView from './components/HistoryView.jsx';
@@ -40,8 +40,8 @@ function Till() {
 
   return (
     <>
-      <div id="app" className="app">
-        <TopBar view={view} onView={setView} email={user.email} onLogout={() => { toast.hide(); setLogoutOpen(true); }} />
+      <div id="app" className="app app-shell">
+        <Sidebar view={view} onView={setView} user={user} onLogout={() => { toast.hide(); setLogoutOpen(true); }} />
         <main className="main">
           {view === 'sell' && <SellView cart={cart} onCheckout={() => cart.count && setCheckoutOpen(true)} />}
           {view === 'customers' && <CustomersView />}
