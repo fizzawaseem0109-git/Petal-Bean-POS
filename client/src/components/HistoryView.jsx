@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/index.js';
+import { useAuth } from '../context/AuthContext.jsx';
 import { usePos } from '../context/PosContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { fmtDate, plural } from '../utils/format.js';
@@ -9,6 +10,8 @@ const PAGE = 50;
 
 export default function HistoryView({ onViewReceipt }) {
   const { settings, money } = usePos();
+    const { user } = useAuth();
+  const canExport = user.permissions?.includes('orders:view:all'); // admins: all bills + export; cashiers: own bills only
   const toast = useToast();
   const [orders, setOrders] = useState([]);
   const [total, setTotal] = useState(0);
@@ -64,17 +67,18 @@ export default function HistoryView({ onViewReceipt }) {
 
   return (
     <section className="view" id="view-history">
-      <div className="view-head">
+        <div className="view-head">
         <div>
-          <h2>Sales history</h2>
+          <h2>{canExport ? 'Sales history' : 'My bills'}</h2>
           <p className="muted" id="salesCount">{n ? plural(n, 'bill') : loading ? 'Loading…' : 'No sales yet'}</p>
         </div>
-        <div className="actions">
-          <button className="btn btn-mint" id="salesCsvBtn" disabled={busy || loading} onClick={() => doExport('csv')}>Export CSV</button>
-          <button className="btn btn-peach" id="salesPdfBtn" disabled={busy || loading} onClick={() => doExport('pdf')}>Export PDF</button>
-        </div>
+        {canExport && (
+          <div className="actions">
+            <button className="btn btn-mint" id="salesCsvBtn" disabled={busy || loading} onClick={() => doExport('csv')}>Export CSV</button>
+            <button className="btn btn-peach" id="salesPdfBtn" disabled={busy || loading} onClick={() => doExport('pdf')}>Export PDF</button>
+          </div>
+        )}
       </div>
-
       <div className="stats" id="stats">
         <div className="stat" style={{ background: 'var(--lilac)' }}><b>{n}</b><span>Bills</span></div>
         <div className="stat" style={{ background: 'var(--peach)' }}><b>{money(summary.revenue)}</b><span>Total sales</span></div>

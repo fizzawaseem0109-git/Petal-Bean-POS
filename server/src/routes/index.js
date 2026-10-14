@@ -1,15 +1,16 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
 import rateLimit from 'express-rate-limit';
-import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import * as S from '../schemas.js';
 import * as auth from '../controllers/authController.js';
+import * as staff from '../controllers/staffController.js';
 import * as settings from '../controllers/settingsController.js';
 import * as products from '../controllers/productController.js';
 import * as inventory from '../controllers/inventoryController.js';
 import * as customers from '../controllers/customerController.js';
 import * as orders from '../controllers/orderController.js';
+import { requireAuth, requirePermission } from '../middleware/auth.js';
 
 export function buildRouter({ limitLogins = true } = {}) {
   const r = Router();
@@ -26,25 +27,32 @@ export function buildRouter({ limitLogins = true } = {}) {
 
   // everything below needs a logged-in user
   r.use(requireAuth);
-  const admin = requireRole('admin');
+    const need = requirePermission; // need('permission-name'): see constants/permissions.js
+
+    r.post('/auth/change-pin', validate(S.changePinSchema), auth.changePin);
 
   r.get('/settings', settings.getSettings);
 
+  r.get('/staff', need('staff:manage'), staff.listStaff);
+  r.post('/staff', need('staff:manage'), validate(S.createStaffSchema), staff.createStaff);
+  r.patch('/staff/:id', need('staff:manage'), validate(S.idParams, 'params'), validate(S.updateStaffSchema), staff.updateStaff);
+  r.post('/staff/:id/pin', need('staff:manage'), validate(S.idParams, 'params'), validate(S.resetPinSchema), staff.resetPin);
+
   r.get('/products', validate(S.listProductsQuery, 'query'), products.listProducts);
-  r.post('/products', admin, validate(S.createProductSchema), products.createProduct);
-  r.patch('/products/:id', admin, validate(S.idParams, 'params'), validate(S.updateProductSchema), products.updateProduct);
-  r.delete('/products/:id', admin, validate(S.idParams, 'params'), products.archiveProduct);
+  r.post('/products', need('products:manage'), validate(S.createProductSchema), products.createProduct);
+  r.patch('/products/:id', need('products:manage'), validate(S.idParams, 'params'), validate(S.updateProductSchema), products.updateProduct);
+  r.delete('/products/:id', need('products:manage'), validate(S.idParams, 'params'), products.archiveProduct);
 
-  r.get('/inventory', inventory.getInventory);
-  r.get('/inventory/movements', validate(S.movementsQuery, 'query'), inventory.listMovements);
-  r.post('/inventory/:id/adjust', admin, validate(S.idParams, 'params'), validate(S.adjustStockSchema), inventory.adjust);
+  r.get('/inventory', need('inventory:view'), inventory.getInventory);
+  r.get('/inventory/movements', need('inventory:view'), validate(S.movementsQuery, 'query'), inventory.listMovements);
+  r.post('/inventory/:id/adjust', need('inventory:adjust'), validate(S.idParams, 'params'), validate(S.adjustStockSchema), inventory.adjust);
 
-  r.get('/customers', validate(S.listCustomersQuery, 'query'), customers.listCustomers);
+  r.get('/customers', need('customers:lookup'), validate(S.listCustomersQuery, 'query'), customers.listCustomers);
 
-  r.post('/orders', validate(S.createOrderSchema), orders.create);
-  r.get('/orders', validate(S.listOrdersQuery, 'query'), orders.list);
-  r.get('/orders/:id', validate(S.idParams, 'params'), orders.getOne);
-  r.get('/sales/summary', validate(S.summaryQuery, 'query'), orders.summary);
+  r.post('/orders', need('sell'), validate(S.createOrderSchema), orders.create);
+  r.get('/orders', need('orders:view:own'), validate(S.listOrdersQuery, 'query'), orders.list);
+  r.get('/orders/:id', need('orders:view:own'), validate(S.idParams, 'params'), orders.getOne);
+  r.get('/sales/summary', need('orders:view:own'), validate(S.summaryQuery, 'query'), orders.summary);
 
   return r;
 }

@@ -21,10 +21,17 @@ export default function CheckoutModal({ cart, onClose, onPaid }) {
   const [busy, setBusy] = useState(false);
   const nameRef = useRef(null);
 
+   useEffect(() => { nameRef.current?.focus(); }, []);
+
+  // Suggest returning customers as the name is typed (cashiers may search, but not download the whole list)
   useEffect(() => {
-    nameRef.current?.focus();
-    api.getCustomers({ limit: 500 }).then((r) => setCustomers(r.data)).catch(() => {});
-  }, []);
+    const q = name.trim();
+    if (q.length < 2) { setCustomers([]); return undefined; }
+    const t = setTimeout(() => {
+      api.getCustomers({ search: q, limit: 10 }).then((r) => setCustomers(r.data)).catch(() => {});
+    }, 250);
+    return () => clearTimeout(t);
+  }, [name]);
 
   // Known customer typed by name → fill in their phone (also runs when the list arrives after typing started)
   useEffect(() => {

@@ -4,6 +4,7 @@ export const api = {
   // auth
   login: (email, pin) => http('/auth/login', { method: 'POST', body: { email, pin } }),
   me: () => http('/auth/me'),
+  changePin: (currentPin, newPin) => http('/auth/change-pin', { method: 'POST', body: { currentPin, newPin } }),   
   getSettings: () => http('/settings'),
 
   // products & inventory
@@ -16,6 +17,12 @@ export const api = {
 
   // customers
   getCustomers: (params) => http('/customers', { params }),
+
+  // staff (admin only; the server enforces this with the staff:manage permission)
+  getStaff: () => http('/staff'),
+  createStaff: (body) => http('/staff', { method: 'POST', body }),
+  updateStaff: (id, body) => http(`/staff/${id}`, { method: 'PATCH', body }),
+  resetStaffPin: (id, pin) => http(`/staff/${id}/pin`, { method: 'POST', body: { pin } }),
 
   // orders (bills) & sales
   createOrder: (body) => http('/orders', { method: 'POST', body }),

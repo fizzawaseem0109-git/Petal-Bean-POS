@@ -2,9 +2,13 @@ import { Order } from '../models/Order.js';
 import { ApiError } from '../utils/ApiError.js';
 import { createOrder } from '../services/orderService.js';
 import { round2 } from '../utils/money.js';
+import { can } from '../constants/permissions.js';
 
 const escapeRx = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const EXPORT_CAP = 10000;
+
+// Cashiers only ever see bills they rang up themselves; admins see everything.
+const ownOnly = (req) => !can(req.user.role, 'orders:view:all');
 
 function dateRange(from, to) {
   if (!from && !to) return null;
@@ -18,7 +22,9 @@ export async function create(req, res) {
 
 export async function list(req, res) {
   const { page, limit, all, search, method, from, to } = req.valid.query;
+    if (all && ownOnly(req)) throw ApiError.forbidden('Only an admin can export all bills.');
   const filter = {};
+  if (ownOnly(req)) filter.cashier = req.user.email;
   if (method) filter.method = method;
   const range = dateRange(from, to);
   if (range) filter.date = range;
@@ -36,7 +42,7 @@ export async function list(req, res) {
 
 export async function getOne(req, res) {
   const order = await Order.findById(req.valid.params.id);
-  if (!order) throw ApiError.notFound('Bill not found.');
+    if (!order || (ownOnly(req) && order.cashier !== req.user.email)) throw ApiError.notFound('Bill not found.');
   res.json({ data: order });
 }
 
@@ -45,6 +51,7 @@ export async function summary(req, res) {
   const { from, to } = req.valid.query;
   const range = dateRange(from, to);
   const match = range ? { date: range } : {};
+    if (ownOnly(req)) match.cashier = req.user.email;
   const [rows, cashBills, cardBills] = await Promise.all([
     Order.aggregate([{ $match: match }, { $group: { _id: '$method', total: { $sum: '$total' } } }]),
     Order.countDocuments({ ...match, method: 'Cash' }),

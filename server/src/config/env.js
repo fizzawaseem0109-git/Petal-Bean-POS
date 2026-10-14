@@ -20,6 +20,14 @@ if (!jwtSecret || jwtSecret === 'change-me-in-production') {
   console.warn('[env] JWT_SECRET not set: using an insecure development secret.');
 }
 
+const autoSeed = (process.env.AUTO_SEED ?? 'true') !== 'false';
+if (isProd && autoSeed && !process.env.SEED_ADMIN_PIN) {
+  throw new Error('SEED_ADMIN_PIN must be set in production (or set AUTO_SEED=false once your admin account exists).');
+}
+if (!isProd && autoSeed && !process.env.SEED_ADMIN_PIN) {
+  console.warn('[env] SEED_ADMIN_PIN not set: a new admin would get the well-known demo PIN. Set your own in server/.env.');
+}
+
 export const env = {
   isProd,
   port: num('PORT', 5000),

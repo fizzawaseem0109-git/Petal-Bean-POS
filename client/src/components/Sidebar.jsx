@@ -1,13 +1,14 @@
 
 const NAV = [
   { id: 'sell', icon: '🛒', label: 'Sell', roles: ['admin', 'cashier'] },
-  { id: 'customers', icon: '👥', label: 'Customers', roles: ['admin', 'cashier'] },
-  { id: 'history', icon: '🧾', label: 'Sales history', roles: ['admin', 'cashier'] },
-  { id: 'inventory', icon: '📦', label: 'Inventory', roles: ['admin', 'cashier'] },
+  { id: 'customers', icon: '👥', label: 'Customers', roles: ['admin'] },
+  { id: 'history', icon: '🧾', label: 'Sales history', cashierLabel: 'My bills', roles: ['admin', 'cashier'] },
+  { id: 'inventory', icon: '📦', label: 'Inventory', roles: ['admin'] },
+    { id: 'staff', icon: '🪪', label: 'Staff', roles: ['admin'] },
 ];
 
-export default function Sidebar({ view, onView, user, onLogout }) {
-  const items = NAV.filter((n) => n.roles.includes(user.role));
+export default function Sidebar({ view, onView, user, onChangePin, onLogout }) {
+    const items = NAV.filter((n) => n.roles.includes(user.role));
   const display = user.name || user.email;
   return (
     <aside className="sidebar">
@@ -25,8 +26,8 @@ export default function Sidebar({ view, onView, user, onLogout }) {
             onClick={() => onView(n.id)}
           >
             <span className="side-ico" aria-hidden="true">{n.icon}</span>
-            <span className="side-label">{n.label}</span>
-          </button>
+            <span className="side-label">{user.role === 'cashier' && n.cashierLabel ? n.cashierLabel : n.label}</span>        
+              </button>
         ))}
       </nav>
 
@@ -36,6 +37,9 @@ export default function Sidebar({ view, onView, user, onLogout }) {
           <strong title={user.email}>{display}</strong>
           <span className={`role-pill role-${user.role}`}>{user.role === 'admin' ? 'Admin' : 'Cashier'}</span>
         </div>
+                <button className="btn btn-ghost btn-sm side-pin" onClick={onChangePin} aria-label="Change my PIN" title="Change my PIN">
+          <span aria-hidden="true">🔑</span><span className="side-pin-label"> Change PIN</span>
+        </button>
         <button className="btn btn-ghost btn-sm side-logout" onClick={onLogout}>Log out</button>
       </div>
     </aside>

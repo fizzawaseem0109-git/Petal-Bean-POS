@@ -9,10 +9,12 @@ const userSchema = new mongoose.Schema(
     emailKey: { type: String, required: true, unique: true },  // lower-case copy used for (case-insensitive) login lookups
     pinHash: { type: String, required: true },
     role: { type: String, enum: ['admin', 'cashier'], default: 'cashier' },
+    active: { type: Boolean, default: true }, // false = account disabled (cannot log in, existing tokens stop working)
+    tokenVersion: { type: Number, default: 0 }, // +1 whenever the PIN changes: every older login token stops working
     failedAttempts: { type: Number, default: 0 },
     lockUntil: { type: Date, default: null },
   },
-  { timestamps: true, toJSON: cleanJson(['pinHash', 'emailKey', 'failedAttempts', 'lockUntil']) }
+  { timestamps: true, toJSON: cleanJson(['pinHash', 'emailKey', 'tokenVersion', 'failedAttempts', 'lockUntil']) }
 );
 
 userSchema.pre('validate', function setEmailKey() {

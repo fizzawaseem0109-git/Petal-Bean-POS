@@ -2,17 +2,20 @@ import { useEffect, useState } from 'react';
 import Modal from './Modal.jsx';
 import { api } from '../api/index.js';
 import { useToast } from '../context/ToastContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 
 export default function LogoutModal({ email, itemsInBill, onClose, onConfirm }) {
   const toast = useToast();
+  const { user } = useAuth();
   const [counts, setCounts] = useState({ bills: '–', customers: '–' });
 
-  useEffect(() => {
+    useEffect(() => {
     toast.hide();
-    Promise.all([api.getSalesSummary(), api.getCustomers({ limit: 1 })])
-      .then(([s, c]) => setCounts({ bills: s.bills, customers: c.total }))
+    const seesCustomers = user.permissions?.includes('customers:view:all'); // cashiers only get "–"
+    Promise.all([api.getSalesSummary(), seesCustomers ? api.getCustomers({ limit: 1 }) : Promise.resolve(null)])
+      .then(([s, c]) => setCounts({ bills: s.bills, customers: c ? c.total : '–' }))
       .catch(() => {});
-  }, [toast]);
+  }, [toast, user]);
 
   return (
     <Modal onClose={onClose} className="logout-card" role="alertdialog" labelledBy="logoutTitle" describedBy="logoutWarn">

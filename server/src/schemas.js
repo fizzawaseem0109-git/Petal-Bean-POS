@@ -7,7 +7,37 @@ const flag = z.enum(['1', 'true', '0', 'false']).transform((v) => v === '1' || v
 
 export const loginSchema = z.object({
   email: z.string().trim().min(1, 'Enter your email first.'),
-  pin: z.string().regex(/^\d{4}$/, 'Enter your 4-digit PIN.'),
+  pin: z.string().regex(/^\d{4,6}$/, 'Enter your PIN (4 to 6 digits).'),
+});
+
+// ---- staff & PINs
+const PIN_ERR = 'PIN must be 4 to 6 digits.';
+const isEasyPin = (p) => {
+  if (/^(\d)\1+$/.test(p)) return true; // 1111, 000000
+  const d = [...p].map(Number);
+  const step = d[1] - d[0];
+  if ((step === 1 || step === -1) && d.every((x, i) => i === 0 || x - d[i - 1] === step)) return true; // 1234, 4321
+  return ['2580', '0852'].includes(p); // straight down the keypad (and the old default PIN)
+};
+export const newPin = z
+  .string({ error: PIN_ERR })
+  .regex(/^\d{4,6}$/, PIN_ERR)
+  .refine((p) => !isEasyPin(p), 'That PIN is too easy to guess. Avoid repeated or sequential digits (like 1111 or 1234).');
+
+const staffRole = z.enum(['admin', 'cashier']);
+export const createStaffSchema = z.object({
+  name: trimmed('Name', 60),
+  email: z.string({ error: 'Email is required.' }).trim().max(120).email('Enter a valid email address.'),
+  role: staffRole.default('cashier'),
+  pin: newPin,
+});
+export const updateStaffSchema = z
+  .object({ name: trimmed('Name', 60).optional(), role: staffRole.optional(), active: z.boolean().optional() })
+  .refine((v) => Object.keys(v).length > 0, 'Nothing to update.');
+export const resetPinSchema = z.object({ pin: newPin });
+export const changePinSchema = z.object({
+  currentPin: z.string({ error: 'Enter your current PIN.' }).regex(/^\d{4,6}$/, 'Enter your current PIN.'),
+  newPin,
 });
 
 const phone = z

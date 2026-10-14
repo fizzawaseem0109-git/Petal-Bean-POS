@@ -21,7 +21,11 @@ npm run dev        # starts API (port 5000) + React app (port 5173)
 
 Open **http://localhost:5173** and log in:
 
-| Email | PIN |
+Open **http://localhost:5173** and log in with the admin email and PIN you set in `server/.env`
+(`SEED_ADMIN_EMAIL`, `SEED_ADMIN_PIN`; choose your own **before** the first run).
+
+On the very first start the server creates this login and the 18 original products automatically.
+Once you are in, add staff accounts and change your own PIN from the app. 
 
 ### MongoDB option A: on your computer
 Install MongoDB Community (https://www.mongodb.com/try/download/community) and make sure it is running.

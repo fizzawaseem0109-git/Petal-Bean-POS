@@ -518,3 +518,81 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 600; letter-spacing:
 @media (max-width: 420px) {
   .field-row { grid-template-columns: 1fr; gap: 0; }
 }
+
+/* =========================================================
+   SIDEBAR (replaces the top bar). Nothing above is edited:
+   these rules only add the sidebar and re-position the
+   shell + cart that used to sit under the top bar.
+   ========================================================= */
+.app-shell { flex-direction: row; align-items: stretch; }
+.app-shell .main { flex: 1; min-width: 0; }
+.app-shell .cart { top: 20px; max-height: calc(100vh - 40px); }
+
+.sidebar {
+  position: sticky; top: 0; align-self: flex-start;
+  width: 232px; height: 100vh; flex-shrink: 0;
+  display: flex; flex-direction: column; gap: 18px;
+  padding: 18px 14px; padding-top: max(18px, env(safe-area-inset-top));
+  background: #fff; border-right: 1px solid var(--line);
+}
+.side-brand { padding: 4px 8px; }
+.side-nav { display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto; }
+.side-link {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 11px 14px; border-radius: var(--radius-md);
+  font-weight: 700; font-size: 14.5px; color: var(--ink-soft);
+  transition: background .15s, color .15s;
+}
+.side-link:hover { background: #f6f2fc; color: var(--ink); }
+.side-link.active { background: var(--lilac); color: var(--ink); }
+.side-ico { font-size: 19px; width: 24px; text-align: center; }
+
+.side-user {
+  display: grid; grid-template-columns: 38px 1fr; gap: 4px 10px; align-items: center;
+  padding-top: 14px; border-top: 1px solid var(--line);
+}
+.side-avatar {
+  width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--peach); font-family: var(--font-display); font-weight: 600; font-size: 17px;
+}
+.side-who { min-width: 0; display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+.side-who strong { font-size: 13.5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.role-pill { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
+.role-admin { background: var(--lilac); color: var(--primary-hover); }
+.role-cashier { background: var(--mint); color: #1f5a41; }
+.side-logout { grid-column: 1 / -1; margin-top: 8px; }
+.side-pin { grid-column: 1 / -1; margin-top: 8px; }
+.side-pin + .side-logout { margin-top: 0; }
+@media (max-width: 1200px) { .side-pin-label { display: none; } }
+
+/* Tablets / small laptops: icons only, so the menu doesn't squeeze the bill panel */
+@media (max-width: 1200px) and (min-width: 861px) {
+  .sidebar { width: 76px; padding-left: 10px; padding-right: 10px; align-items: center; }
+  .side-brand-name, .side-label, .side-who { display: none; }
+  .side-link { justify-content: center; padding: 12px 8px; }
+  .side-user { grid-template-columns: 1fr; justify-items: center; }
+  .side-logout { padding: 8px 10px; font-size: 12px; }
+}
+
+/* Phones: slim header on top + the same bottom nav as before */
+@media (max-width: 860px) {
+  .app-shell { flex-direction: column; }
+  .sidebar {
+    width: 100%; height: auto; align-self: stretch; flex-direction: row; align-items: center; gap: 12px;
+    padding: 10px 16px; padding-top: max(10px, env(safe-area-inset-top));
+    border-right: none; border-bottom: 1px solid var(--line); z-index: 20;
+  }
+  .side-brand { flex: 1; padding: 0; }
+  .side-nav {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; flex: none; flex-direction: row;
+    background: #fff; border-top: 1px solid var(--line); gap: 0; overflow: visible;
+    padding: 6px 8px; padding-bottom: max(6px, env(safe-area-inset-bottom)); justify-content: space-around;
+  }
+  .side-link { flex-direction: column; gap: 2px; font-size: 11px; padding: 6px 10px; border-radius: 14px; flex: 1; align-items: center; text-align: center; }
+  .side-ico { font-size: 20px; }
+  .side-user { display: flex; border-top: none; padding-top: 0; gap: 8px; }
+  .side-avatar, .side-who strong { display: none; }
+  .side-who { flex-direction: row; }
+  .side-logout { margin-top: 0; }
+  .app-shell .cart { top: auto; max-height: 85vh; }
+}

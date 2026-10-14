@@ -292,3 +292,206 @@ describe('inventory', () => {
     assert.equal(sell.status, 201, 'cashiers can still sell');
   });
 });
+
+describe('roles & permissions', () => {
+  let cashierToken;
+  const asCashier = (r) => r.set('Authorization', `Bearer ${cashierToken}`);
+  const cust = { name: 'Ayesha Khan', phone: '0300 1234567' };
+  const sell = async (authFn, name = 'Cappuccino') => {
+    const p = await bySlug(name);
+    return authFn(api().post('/api/orders')).send({ customer: cust, items: [{ productId: String(p._id), qty: 1 }], payment: { method: 'Cash' } });
+  };
+
+  beforeEach(async () => {
+    await User.create({ email: 'cashier@email.com', role: 'cashier', pinHash: await User.hashPin('1234') });
+    cashierToken = (await api().post('/api/auth/login').send({ email: 'cashier@email.com', pin: '1234' })).body.token;
+  });
+
+  it('login and /auth/me return the role\'s permission list', async () => {
+    const a = await api().post('/api/auth/login').send({ email: 'fizza-waseem@email.com', pin: '2580' });
+    assert.ok(a.body.user.permissions.includes('staff:manage'));
+    const c = await asCashier(api().get('/api/auth/me'));
+    assert.ok(c.body.user.permissions.includes('sell'));
+    assert.ok(!c.body.user.permissions.includes('inventory:adjust'));
+    assert.equal(c.body.user.pinHash, undefined);
+  });
+
+  it('cashier can use the menu and sell', async () => {
+    assert.equal((await asCashier(api().get('/api/products'))).status, 200);
+    assert.equal((await asCashier(api().get('/api/settings'))).status, 200);
+    assert.equal((await sell(asCashier)).status, 201);
+  });
+
+  it('cashier is blocked from inventory, stock history and product changes (403)', async () => {
+    const cap = await bySlug('Cappuccino');
+    const id = String(cap._id);
+    assert.equal((await asCashier(api().get('/api/inventory'))).status, 403);
+    assert.equal((await asCashier(api().get('/api/inventory/movements'))).status, 403);
+    assert.equal((await asCashier(api().post('/api/inventory/' + id + '/adjust')).send({ delta: 1 })).status, 403);
+    assert.equal((await asCashier(api().post('/api/products')).send({ name: 'X', price: 1, category: 'tea' })).status, 403);
+    assert.equal((await asCashier(api().patch('/api/products/' + id)).send({ price: 1 })).status, 403);
+    assert.equal((await asCashier(api().delete('/api/products/' + id))).status, 403);
+    assert.equal((await Product.findById(id)).price, 450, 'nothing changed');
+  });
+
+  it('cashier only sees their own bills, their own totals, and cannot export', async () => {
+    const adminBill = (await sell(auth)).body.data;
+    const myBill = (await sell(asCashier)).body.data;
+    const mine = await asCashier(api().get('/api/orders'));
+    assert.equal(mine.body.total, 1);
+    assert.equal(mine.body.data[0].id, myBill.id);
+    assert.equal((await asCashier(api().get('/api/orders/' + myBill.id))).status, 200);
+    assert.equal((await asCashier(api().get('/api/orders/' + adminBill.id))).status, 404, "someone else's bill looks like it doesn't exist");
+    assert.equal((await asCashier(api().get('/api/orders?all=true'))).status, 403);
+    assert.equal((await asCashier(api().get('/api/sales/summary'))).body.bills, 1);
+    assert.equal((await auth(api().get('/api/orders'))).body.total, 2, 'admin still sees everything');
+    assert.equal((await auth(api().get('/api/sales/summary'))).body.bills, 2);
+  });
+
+  it('cashier can search customers (max 10) but not list them all; admin can list all', async () => {
+    await sell(auth);
+    assert.equal((await asCashier(api().get('/api/customers'))).status, 400);
+    assert.equal((await asCashier(api().get('/api/customers?search=a'))).status, 400);
+    const found = await asCashier(api().get('/api/customers?search=ayesha'));
+    assert.equal(found.status, 200);
+    assert.equal(found.body.data.length, 1);
+    assert.equal((await auth(api().get('/api/customers'))).status, 200);
+  });
+
+  it('a disabled account cannot log in and its existing token stops working', async () => {
+    await User.updateOne({ emailKey: 'cashier@email.com' }, { active: false });
+    assert.equal((await asCashier(api().get('/api/products'))).status, 401);
+    const res = await api().post('/api/auth/login').send({ email: 'cashier@email.com', pin: '1234' });
+    assert.equal(res.status, 403);
+    assert.match(res.body.message, /disabled/);
+  });
+
+  it('accounts created before the "active" field existed still work', async () => {
+    await User.collection.updateOne({ emailKey: 'cashier@email.com' }, { $unset: { active: '' } });
+    assert.equal((await asCashier(api().get('/api/products'))).status, 200);
+    assert.equal((await api().post('/api/auth/login').send({ email: 'cashier@email.com', pin: '1234' })).status, 200);
+  });
+
+  it('a role change applies immediately, even to a token issued earlier', async () => {
+    const cap = await bySlug('Cappuccino');
+    assert.equal((await auth(api().post(`/api/inventory/${cap._id}/adjust`)).send({ delta: 1 })).status, 200);
+    await User.updateOne({ emailKey: 'fizza-waseem@email.com' }, { role: 'cashier' });
+    assert.equal((await auth(api().post(`/api/inventory/${cap._id}/adjust`)).send({ delta: 1 })).status, 403);
+  });
+});
+
+describe('staff management & PINs', () => {
+  const adminEmail = 'fizza-waseem@email.com';
+  const loginAs = (email, pin) => api().post('/api/auth/login').send({ email, pin });
+  const addStaff = (body) => auth(api().post('/api/staff')).send({ name: 'Sara Ahmed', email: 'sara@email.com', role: 'cashier', pin: '4826', ...body });
+  const adminId = async () => String((await User.findOne({ emailKey: adminEmail }))._id);
+
+  it('admin creates a cashier who can then log in; the response never leaks the PIN hash', async () => {
+    const res = await addStaff();
+    assert.equal(res.status, 201);
+    assert.equal(res.body.data.role, 'cashier');
+    assert.equal(res.body.data.pinHash, undefined);
+    assert.equal(res.body.data.tokenVersion, undefined);
+    const l = await loginAs('Sara@Email.com', '4826');
+    assert.equal(l.status, 200);
+    assert.equal(l.body.user.role, 'cashier');
+    const stored = await User.findOne({ emailKey: 'sara@email.com' });
+    assert.notEqual(stored.pinHash, '4826');
+    assert.match(stored.pinHash, /^\$2[aby]\$/, 'stored as a bcrypt hash');
+  });
+
+  it('refuses a duplicate email (any capitalisation) and a bad email', async () => {
+    await addStaff();
+    assert.equal((await addStaff({ email: 'SARA@email.com' })).status, 409);
+    assert.equal((await addStaff({ email: 'not-an-email' })).status, 400);
+    assert.equal((await addStaff({ email: 'x@email.com', name: '  ' })).status, 400);
+  });
+
+  it('only accepts 4-6 digit PINs that are not trivially guessable', async () => {
+    for (const pin of ['1111', '000000', '1234', '4321', '123456', '2580', '12', '1234567', 'abcd', '12 34']) {
+      assert.equal((await addStaff({ email: `t${pin.length}${Math.random()}@email.com`, pin })).status, 400, `rejects ${pin}`);
+    }
+    assert.equal((await addStaff({ email: 'six@email.com', pin: '482615' })).status, 201);
+    assert.equal((await loginAs('six@email.com', '482615')).status, 200, 'a 6-digit PIN can log in');
+  });
+
+  it('cashiers cannot touch any staff endpoint (403)', async () => {
+    await addStaff();
+    const ct = (await loginAs('sara@email.com', '4826')).body.token;
+    const asC = (r) => r.set('Authorization', `Bearer ${ct}`);
+    const id = await adminId();
+    assert.equal((await asC(api().get('/api/staff'))).status, 403);
+    assert.equal((await asC(api().post('/api/staff')).send({ name: 'X', email: 'x@email.com', pin: '4826' })).status, 403);
+    assert.equal((await asC(api().patch('/api/staff/' + id)).send({ active: false })).status, 403);
+    assert.equal((await asC(api().post(`/api/staff/${id}/pin`)).send({ pin: '4826' })).status, 403);
+  });
+
+  it('lists everyone, admins first, including accounts that predate the "active" field', async () => {
+    await addStaff();
+    await User.collection.updateOne({ emailKey: 'sara@email.com' }, { $unset: { active: '' } });
+    const res = await auth(api().get('/api/staff'));
+    assert.equal(res.body.data.length, 2);
+    assert.equal(res.body.data[0].role, 'admin');
+    assert.equal(res.body.data[1].active, true);
+    assert.ok(res.body.data.every((u) => u.pinHash === undefined && u.emailKey === undefined));
+  });
+
+  it('renames, changes role, disables and re-enables; email cannot be changed', async () => {
+    const id = (await addStaff()).body.data.id;
+    assert.equal((await auth(api().patch('/api/staff/' + id)).send({ name: 'Sara A.' })).body.data.name, 'Sara A.');
+    assert.equal((await auth(api().patch('/api/staff/' + id)).send({ email: 'new@email.com' })).status, 400, 'nothing editable sent');
+    assert.equal((await User.findById(id)).email, 'sara@email.com');
+    await auth(api().patch('/api/staff/' + id)).send({ active: false });
+    assert.equal((await loginAs('sara@email.com', '4826')).status, 403);
+    await auth(api().patch('/api/staff/' + id)).send({ active: true });
+    assert.equal((await loginAs('sara@email.com', '4826')).status, 200);
+    assert.equal((await auth(api().patch('/api/staff/' + id)).send({ role: 'admin' })).body.data.role, 'admin');
+    assert.equal((await auth(api().patch('/api/staff/000000000000000000000000')).send({ name: 'Z' })).status, 404);
+    assert.equal((await auth(api().patch('/api/staff/not-an-id')).send({ name: 'Z' })).status, 400);
+  });
+
+  it('an admin cannot demote or disable themselves (so the last admin can never be removed)', async () => {
+    const id = await adminId();
+    assert.equal((await auth(api().patch('/api/staff/' + id)).send({ role: 'cashier' })).status, 403);
+    assert.equal((await auth(api().patch('/api/staff/' + id)).send({ active: false })).status, 403);
+    assert.equal((await auth(api().patch('/api/staff/' + id)).send({ name: 'Boss' })).status, 200, 'renaming yourself is fine');
+    assert.equal((await User.findById(id)).role, 'admin');
+  });
+
+  it('admin resets someone else\'s PIN: old PIN and old sessions stop working, a lockout is cleared', async () => {
+    const id = (await addStaff()).body.data.id;
+    const oldToken = (await loginAs('sara@email.com', '4826')).body.token;
+    for (let i = 0; i < 5; i++) await loginAs('sara@email.com', '9999');
+    assert.equal((await loginAs('sara@email.com', '4826')).status, 429, 'locked');
+    assert.equal((await auth(api().post(`/api/staff/${id}/pin`)).send({ pin: '1111' })).status, 400, 'trivial PIN refused');
+    assert.equal((await auth(api().post(`/api/staff/${id}/pin`)).send({ pin: '7391' })).status, 200);
+    assert.equal((await loginAs('sara@email.com', '4826')).status, 401);
+    assert.equal((await loginAs('sara@email.com', '7391')).status, 200, 'unlocked, new PIN works');
+    assert.equal((await api().get('/api/products').set('Authorization', `Bearer ${oldToken}`)).status, 401, 'old session ended');
+  });
+
+  it('an admin cannot use the reset route on themselves', async () => {
+    assert.equal((await auth(api().post(`/api/staff/${await adminId()}/pin`)).send({ pin: '7391' })).status, 400);
+  });
+
+  it('change-PIN: needs the right current PIN, keeps this session, ends the others', async () => {
+    const other = await login(); // a second session for the same admin
+    const wrong = await auth(api().post('/api/auth/change-pin')).send({ currentPin: '9999', newPin: '7391' });
+    assert.equal(wrong.status, 400, '400 (not 401) so the app does not log the person out');
+    assert.equal((await auth(api().post('/api/auth/change-pin')).send({ currentPin: '2580', newPin: '2580' })).status, 400, 'trivial/default PIN');
+    assert.equal((await auth(api().post('/api/auth/change-pin')).send({ currentPin: '2580', newPin: '1234' })).status, 400, 'easy PIN');
+    const ok = await auth(api().post('/api/auth/change-pin')).send({ currentPin: '2580', newPin: '7391' });
+    assert.equal(ok.status, 200);
+    assert.ok(ok.body.token && ok.body.user.permissions.length > 0);
+    assert.equal((await api().get('/api/products').set('Authorization', `Bearer ${ok.body.token}`)).status, 200, 'this session continues with the new token');
+    assert.equal((await auth(api().get('/api/products'))).status, 401, 'the old token for this session is dead');
+    assert.equal((await api().get('/api/products').set('Authorization', `Bearer ${other}`)).status, 401, 'other sessions are dead');
+    assert.equal((await loginAs(adminEmail, '2580')).status, 401);
+    assert.equal((await loginAs(adminEmail, '7391')).status, 200);
+  });
+
+  it('change-PIN counts wrong current PINs and locks after 5', async () => {
+    for (let i = 0; i < 5; i++) await auth(api().post('/api/auth/change-pin')).send({ currentPin: '9999', newPin: '7391' });
+    assert.equal((await auth(api().post('/api/auth/change-pin')).send({ currentPin: '2580', newPin: '7391' })).status, 429);
+  });
+});

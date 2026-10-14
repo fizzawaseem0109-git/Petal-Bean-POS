@@ -32,5 +32,12 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => { clear(); toast('Logged out'); }, [clear, toast]);
 
-  return <AuthContext.Provider value={{ user, checking, login, logout }}>{children}</AuthContext.Provider>;
+  // Change my own PIN: the server returns a fresh token for THIS session (other sessions are logged out).
+  const changePin = useCallback(async (currentPin, newPin) => {
+    const res = await api.changePin(currentPin, newPin);
+    setToken(res.token);
+    setUser(res.user);
+  }, []);
+
+  return <AuthContext.Provider value={{ user, checking, login, logout, changePin }}>{children}</AuthContext.Provider>;
 }
