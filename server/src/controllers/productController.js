@@ -1,6 +1,7 @@
 import { Product } from '../models/Product.js';
 import { StockMovement } from '../models/StockMovement.js';
 import { ApiError } from '../utils/ApiError.js';
+import { checkStockAlerts } from '../services/notificationService.js';
 
 const DUPLICATE = 'A product with that name already exists.';
 const onDuplicate = (err) => { throw err?.code === 11000 ? ApiError.conflict(DUPLICATE) : err; };
@@ -34,13 +35,16 @@ export async function updateProduct(req, res) {
   const product = await Product.findById(req.valid.params.id);
   if (!product) throw ApiError.notFound('Product not found.');
   product.set(req.valid.body);
-  await product.save().catch(onDuplicate); // save() (not findByIdAndUpdate) so the name-key hook and validators run
+    await product.save().catch(onDuplicate); // save() (not findByIdAndUpdate) so the name-key hook and validators run
+  await checkStockAlerts([product._id]); // a new alert level, tracking on/off, … can change the product's stock alerts
   res.json({ data: product });
 }
 
 // Products that were sold before are referenced by old bills, so "delete" just takes them off the menu.
 export async function archiveProduct(req, res) {
   const product = await Product.findByIdAndUpdate(req.valid.params.id, { $set: { active: false } }, { returnDocument: 'after' });
-  if (!product) throw ApiError.notFound('Product not found.');
+    if (!product) throw ApiError.notFound('Product not found.');
+  await checkStockAlerts([product._id]); // an archived product no longer raises stock alerts
   res.json({ data: product });
 }
+

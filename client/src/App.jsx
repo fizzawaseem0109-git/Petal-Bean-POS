@@ -10,6 +10,9 @@ import CustomersView from './components/CustomersView.jsx';
 import HistoryView from './components/HistoryView.jsx';
 import InventoryView from './components/InventoryView.jsx';
 import StaffView from './components/StaffView.jsx';
+import StaffPerformanceView from './components/StaffPerformanceView.jsx';
+import SettingsView from './components/SettingsView.jsx';
+import HeaderBar from './components/HeaderBar.jsx';
 import CheckoutModal from './components/CheckoutModal.jsx';
 import ReceiptModal from './components/ReceiptModal.jsx';
 import LogoutModal from './components/LogoutModal.jsx';
@@ -18,8 +21,8 @@ import PrintArea from './components/PrintArea.jsx';
 
 function Till() {
   const { user, logout } = useAuth();
-  const { refreshProducts } = usePos();
-  const toast = useToast();
+  const { settings, refreshProducts, refreshSettings } = usePos(); 
+   const toast = useToast();
   const cart = useCart();
 
   const [view, setView] = useState('sell');
@@ -34,6 +37,7 @@ function Till() {
   const onPaid = (sale) => {
     cart.clear();
     refreshProducts(); // stock just went down
+    if (sale.taxRate !== settings.taxRate) refreshSettings(); // another till changed the tax: pick up the new rate
     setCheckoutOpen(false);
     setReceipt({ sale, fresh: true });
   };
@@ -46,11 +50,15 @@ function Till() {
       <div id="app" className="app app-shell">
         <Sidebar view={view} onView={setView} user={user} onChangePin={() => { toast.hide(); setPinOpen(true); }} onLogout={() => { toast.hide(); setLogoutOpen(true); }} />
         <main className="main">
+          <HeaderBar onSettings={() => setView('settings')} settingsActive={view === 'settings'} />
+          {view === 'staff' && user.role === 'admin' && <StaffView />}
+         {view === 'performance' && user.permissions?.includes('reports:view') && <StaffPerformanceView onViewReceipt={(sale) => setReceipt({ sale, fresh: false })} />}
+          {view === 'settings' && <SettingsView onChangePassword={() => { toast.hide(); setPinOpen(true); }} />}
           {view === 'sell' && <SellView cart={cart} onCheckout={() => cart.count && setCheckoutOpen(true)} />}
           {view === 'customers' && <CustomersView />}
           {view === 'history' && <HistoryView onViewReceipt={(sale) => setReceipt({ sale, fresh: false })} />}
           {view === 'inventory' && <InventoryView />}
-          {view === 'staff' && user.role === 'admin' && <StaffView />}
+          
         </main>
       </div>
 

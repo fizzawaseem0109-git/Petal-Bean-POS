@@ -27,6 +27,10 @@ export function PosProvider({ children }) {
   const refreshProducts = useCallback(async () => {
     try { setProducts((await api.getProducts()).data); } catch { /* keep what we have */ }
   }, []);
+    // Re-read shop settings (e.g. another till changed the tax rate)
+  const refreshSettings = useCallback(async () => {
+    try { setSettings(await api.getSettings()); } catch { /* keep what we have */ }
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
@@ -39,8 +43,10 @@ export function PosProvider({ children }) {
       catOf: (id) => settings.categories.find((c) => c.id === id) || { id, name: id, color: 'var(--lilac)' },
       productOf: (id) => products.find((p) => p.id === id),
       refreshProducts,
+      refreshSettings,
+      applySettings: setSettings, // the Settings screen hands over the server's reply after a save
     };
-  }, [settings, products, refreshProducts]);
+  }, [settings, products, refreshProducts, refreshSettings]);
 
   if (!value) {
     return (

@@ -30,12 +30,13 @@ if (!isProd && autoSeed && !process.env.SEED_ADMIN_PIN) {
 
 export const env = {
   isProd,
-  port: num('PORT', 5000),
+  port: num('PORT', 5001),
   mongoUri: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/petal-and-bean',
   jwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '12h',
   clientUrls: (process.env.CLIENT_URL || 'http://localhost:5173').split(',').map((s) => s.trim()).filter(Boolean),
   autoSeed: (process.env.AUTO_SEED ?? 'true') !== 'false',
+  demoLogin: process.env.DEMO_LOGIN === 'true', // login-screen account picker; OFF unless you opt in
   seedAdmin: {
     name: process.env.SEED_ADMIN_NAME || 'Admin',
     email: (process.env.SEED_ADMIN_EMAIL || 'Fizza-waseem@email.com').trim(),

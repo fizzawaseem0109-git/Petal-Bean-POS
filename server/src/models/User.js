@@ -11,6 +11,7 @@ const userSchema = new mongoose.Schema(
     role: { type: String, enum: ['admin', 'cashier'], default: 'cashier' },
     active: { type: Boolean, default: true }, // false = account disabled (cannot log in, existing tokens stop working)
     tokenVersion: { type: Number, default: 0 }, // +1 whenever the PIN changes: every older login token stops working
+   mustChangePassword: { type: Boolean, default: false }, // true = this person must choose a new password before doing anything else
     failedAttempts: { type: Number, default: 0 },
     lockUntil: { type: Date, default: null },
   },

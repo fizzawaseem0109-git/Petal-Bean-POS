@@ -64,9 +64,18 @@ export default function SellView({ cart, onCheckout }) {
           <button className="btn btn-ghost btn-sm" id="clearCartBtn" onClick={() => count && cart.clear()}>Clear</button>
           <button className="cart-close" id="cartCloseBtn" aria-label="Close bill" onClick={() => setCartOpen(false)}>✕</button>
         </div>
-        <div className="cart-items" id="cartItems">
+                <div className={`cart-items${lines.length ? '' : ' is-empty'}`} id="cartItems">
           {!lines.length ? (
-            <div className="empty"><span className="empty-ico">🧺</span>Tap a product to add it to the bill.</div>
+            <div className="cart-empty">
+              <svg viewBox="0 0 96 96" fill="none" aria-hidden="true">
+                <circle cx="48" cy="48" r="44" fill="#f3effa" />
+                <path d="M28 40h40l-4 26a6 6 0 0 1-6 5H38a6 6 0 0 1-6-5l-4-26z" fill="#e3d7fa" stroke="#7b61c9" strokeWidth="3" strokeLinejoin="round" />
+                <path d="M38 40c0-8 4-14 10-14s10 6 10 14" stroke="#7b61c9" strokeWidth="3" strokeLinecap="round" />
+                <circle cx="42" cy="52" r="2.5" fill="#7b61c9" /><circle cx="54" cy="52" r="2.5" fill="#7b61c9" />
+                <path d="M43 59c3 3 7 3 10 0" stroke="#7b61c9" strokeWidth="3" strokeLinecap="round" />
+              </svg>
+              No items added yet. Select products from the menu to start the bill.
+            </div>
           ) : (
             lines.map(({ product: p, qty }) => (
               <div className="cart-item" key={p.id}>

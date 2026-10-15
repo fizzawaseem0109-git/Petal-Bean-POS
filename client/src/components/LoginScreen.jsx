@@ -1,86 +1,73 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useEffect, useRef, useState } from 'react';
+import { api } from '../api/index.js';import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
-
-const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'clear', '0', 'back'];
 
 export default function LoginScreen() {
   const { login } = useAuth();
   const toast = useToast();
-  const [pin, setPin] = useState('');
+  const [password, setPassword] = useState('');
+  const [show, setShow] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [accounts, setAccounts] = useState([]); // demo account picker (empty = hidden)
+  const [picked, setPicked] = useState('');
   const emailRef = useRef(null);
-  const dotsRef = useRef(null);
-  const pinRef = useRef('');
-  pinRef.current = pin;
-  const lockedRef = useRef(false); // keys are ignored while the shake animation plays
+  const passRef = useRef(null);
+  const wrapRef = useRef(null);
 
   const shake = () => {
-    const dots = dotsRef.current;
-    if (!dots) return;
-    dots.classList.remove('shake');
-    void dots.offsetWidth; // restart the CSS animation
-    dots.classList.add('shake');
+    const el = wrapRef.current;
+    if (!el) return;
+    el.classList.remove('shake');
+    void el.offsetWidth; // restart the CSS animation
+    el.classList.add('shake');
   };
 
-  const tryLogin = useCallback(async () => {
+   useEffect(() => {
+    let live = true;
+    api.getDemoAccounts().then((r) => { if (live) setAccounts(r.accounts || []); }).catch(() => {}); // any failure = no picker, normal login
+    return () => { live = false; };
+  }, []);
+
+  // Only fills the email box and moves to the password box. Nothing is signed in until the password is typed and checked by the server.
+ const pick = (e) => {
+    const email = e.target.value;
+    setPicked(email);
+    if (!email) return;
+    emailRef.current.value = email;
+    setError('');
+    passRef.current?.focus();
+  };
+  const submit = async (e) => {
+    e.preventDefault();
+    if (busy) return;
     const email = emailRef.current.value.trim();
     if (!email) {
       setError('Enter your email first.');
       emailRef.current.focus();
       return;
     }
-    if (pinRef.current.length < 4) {
-      setError('Enter your 4-digit PIN.');
+    if (!password) {
+      setError('Enter your password.');
+      passRef.current.focus();
       return;
     }
-    if (lockedRef.current) return;
     setBusy(true);
     try {
-      await login(email, pinRef.current);
+      await login(email, password); // the password lives only in this component's state
       toast('Till opened');
-    } catch (e) {
-      setError(e.status === 0 ? e.message : e.message || 'Email or PIN is incorrect. Try again.');
-      if (e.status !== 0) shake();
-      lockedRef.current = true;
-      setTimeout(() => { lockedRef.current = false; setPin(''); }, 400);
+    } catch (err) {
+      setError(err.status === 0 ? err.message : err.message || 'Email or password is incorrect. Try again.');
+      if (err.status !== 0) shake();
+      setPassword('');
       setBusy(false);
+      passRef.current?.focus();
     }
-  }, [login, toast]);
-
-  const pressKey = useCallback((key) => {
-    if (lockedRef.current) return;
-    setError('');
-    setPin((p) => {
-      if (key === 'clear') return '';
-      if (key === 'back') return p.slice(0, -1);
-      return p.length < 4 ? p + key : p;
-    });
-  }, []);
-
-  // Auto-submit shortly after the 4th digit (as before)
-  useEffect(() => {
-    if (pin.length !== 4) return undefined;
-    const t = setTimeout(tryLogin, 150);
-    return () => clearTimeout(t);
-  }, [pin, tryLogin]);
-
-  // Keyboard digits work when you're not typing in the email box
-  useEffect(() => {
-    const onKey = (e) => {
-      if (document.activeElement === emailRef.current) return;
-      if (/^\d$/.test(e.key)) pressKey(e.key);
-      else if (e.key === 'Backspace') pressKey('back');
-      else if (e.key === 'Enter') tryLogin();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [pressKey, tryLogin]);
+  };
 
   return (
     <section id="loginScreen" className="login">
-      <div className="login-card">
+      <form className="login-card" onSubmit={submit} noValidate>
         <div className="login-brand">
           <span className="logo-mark" aria-hidden="true">🌸</span>
           <div>
@@ -89,34 +76,44 @@ export default function LoginScreen() {
           </div>
         </div>
 
+        
+        {accounts.length > 0 && (
+          <label className="field demo-pick">
+            <span>Demo account</span>
+            <select id="demoAccount" value={picked} onChange={pick}>
+              <option value="">Choose an account…</option>
+              {accounts.map((a) => (
+                <option key={a.email} value={a.email}>{a.name || a.email} · {a.role === 'admin' ? 'Admin' : 'Cashier'}</option>
+              ))}
+            </select>
+          </label>
+      )}
         <label className="field">
           <span>Email</span>
           <input
             id="loginEmail" ref={emailRef} type="email" placeholder="you@email.com" autoComplete="username"
-            onKeyDown={(e) => { if (e.key === 'Enter') tryLogin(); }}
-          />
+             onChange={() => { setError(''); setPicked(''); }}          />
         </label>
 
-        <div className="pin-row">
-          <span className="pin-label">PIN code</span>
-          <div className="pin-dots" id="pinDots" ref={dotsRef} aria-live="polite">
-            {[0, 1, 2, 3].map((i) => <span key={i} className={i < pin.length ? 'filled' : ''}></span>)}
+        <div className="field">
+          <label htmlFor="loginPassword"><span>Password</span></label>
+          <div className="pw-wrap" ref={wrapRef}>
+            <input
+              id="loginPassword" ref={passRef} type={show ? 'text' : 'password'} value={password} maxLength={72}
+              autoComplete="current-password" onChange={(e) => { setPassword(e.target.value); setError(''); }}
+            />
+            <button
+              type="button" className="pw-toggle" onClick={() => setShow((s) => !s)}
+              aria-label={show ? 'Hide password' : 'Show password'} aria-pressed={show}
+            >{show ? 'Hide' : 'Show'}</button>
           </div>
         </div>
         <p className="login-error" id="loginError" role="alert">{error}</p>
 
-        <div className="keypad" id="keypad">
-          {KEYS.map((k) =>
-            k === 'clear' ? <button key={k} className="key-soft" aria-label="Clear PIN" onClick={() => pressKey(k)}>Clear</button>
-            : k === 'back' ? <button key={k} className="key-soft" aria-label="Delete last digit" onClick={() => pressKey(k)}>⌫</button>
-            : <button key={k} onClick={() => pressKey(k)}>{k}</button>
-          )}
-        </div>
-
-        <button className="btn btn-primary btn-block" id="loginBtn" onClick={tryLogin} disabled={busy}>
+        <button type="submit" className="btn btn-primary btn-block" id="loginBtn" disabled={busy}>
           {busy ? 'Opening…' : 'Open till'}
         </button>
-      </div>
+      </form>
     </section>
   );
 }

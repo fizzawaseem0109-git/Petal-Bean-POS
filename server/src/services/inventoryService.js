@@ -1,7 +1,7 @@
 import { Product } from '../models/Product.js';
 import { StockMovement } from '../models/StockMovement.js';
 import { ApiError } from '../utils/ApiError.js';
-
+import { checkStockAlerts } from './notificationService.js';
 /**
  * Take stock for every tracked line of a sale, all-or-nothing.
  *
@@ -82,5 +82,6 @@ export async function adjustStock(productId, { delta, set, reason, note }, by) {
     note: note || '',
     by,
   });
+    await checkStockAlerts([updated._id]); // a restock clears the low / out alerts; a drop below the alert level raises one
   return { product: updated, movement };
 }

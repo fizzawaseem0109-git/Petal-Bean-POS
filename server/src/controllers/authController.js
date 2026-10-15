@@ -3,10 +3,11 @@ import { User } from '../models/User.js';
 import { signToken } from '../middleware/auth.js';
 import { permissionsFor } from '../constants/permissions.js';
 import { ApiError } from '../utils/ApiError.js';
+import { env } from '../config/env.js';
 
 const MAX_ATTEMPTS = 5;
 const LOCK_MINUTES = 5;
-const BAD_LOGIN = 'Email or PIN is incorrect. Try again.';
+const BAD_LOGIN = 'Email or password is incorrect. Try again.';
 const publicUser = (u) => ({ ...u.toJSON(), permissions: permissionsFor(u.role) });
 
 // A real hash, so an unknown email takes about as long as a wrong PIN (no user enumeration by timing).
@@ -23,7 +24,7 @@ export async function login(req, res) {
 
   if (user.lockUntil && user.lockUntil > new Date()) {
     const mins = Math.ceil((user.lockUntil - Date.now()) / 60000);
-    throw new ApiError(429, `Too many wrong PINs. Try again in ${mins} minute${mins > 1 ? 's' : ''}.`);
+    throw new ApiError(429, `Too many wrong passwords. Try again in ${mins} minute${mins > 1 ? 's' : ''}.`);
   }
 
   if (!(await user.verifyPin(pin))) {
@@ -37,6 +38,14 @@ export async function login(req, res) {
 }
 
 export const me = (req, res) => res.json({ user: publicUser(req.user) });
+
+// Public, so it can fill the login-screen dropdown. Only answers when DEMO_LOGIN=true in server/.env.
+// Returns name / email / role of ACTIVE accounts only: never a password, hash, id or lock state.
+export async function demoAccounts(_req, res) {
+  if (!env.demoLogin) return res.json({ accounts: [] });
+  const users = await User.find({ active: { $ne: false } }).sort({ role: 1, name: 1, emailKey: 1 }).limit(12);
+  res.json({ accounts: users.map((u) => ({ name: u.name || '', email: u.email, role: u.role })) });
+}
 
 // Count a wrong PIN; lock the account for a few minutes after too many (shared by login and change-PIN).
 async function recordFailedPin(userId) {
@@ -53,17 +62,17 @@ export async function changePin(req, res) {
   const user = req.user;
   if (user.lockUntil && user.lockUntil > new Date()) {
     const mins = Math.ceil((user.lockUntil - Date.now()) / 60000);
-    throw new ApiError(429, `Too many wrong PINs. Try again in ${mins} minute${mins > 1 ? 's' : ''}.`);
+    throw new ApiError(429, `Too many wrong passwords.  Try again in ${mins} minute${mins > 1 ? 's' : ''}.`);
   }
   if (!(await user.verifyPin(currentPin))) {
     await recordFailedPin(user._id);
-    throw ApiError.badRequest('Your current PIN is not correct.'); // 400, not 401: the app logs people out on 401
+    throw ApiError.badRequest('Your current password is not correct.');  
   }
-  if (currentPin === newPin) throw ApiError.badRequest('Choose a PIN that is different from your current one.');
+  if (currentPin === newPin) throw ApiError.badRequest('Choose a password that is different from your current one.');
   const updated = await User.findByIdAndUpdate(
     user._id,
-    { $set: { pinHash: await User.hashPin(newPin), failedAttempts: 0, lockUntil: null }, $inc: { tokenVersion: 1 } },
-    { returnDocument: 'after' }
+    { $set: { pinHash: await User.hashPin(newPin), failedAttempts: 0, lockUntil: null, mustChangePassword: false }, $inc: { tokenVersion: 1 } },
+        { returnDocument: 'after' }
   );
   res.json({ token: signToken(updated), user: publicUser(updated) });
 }

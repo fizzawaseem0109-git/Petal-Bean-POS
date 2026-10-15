@@ -3,27 +3,24 @@ import Modal from './Modal.jsx';
 import { api } from '../api/index.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PIN_RE = /^\d{4,6}$/;
+const MIN_PW = 8; // the server also enforces 8–72 characters and refuses easy passwords
 
 // Admin creates a staff account. The PIN stays in this component's state only: never logged or stored.
 export default function AddStaffModal({ onClose, onSaved }) {
   const [f, setF] = useState({ name: '', email: '', role: 'cashier', pin: '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+    const [show, setShow] = useState(false);
   const set = (k) => (e) => { setF((x) => ({ ...x, [k]: e.target.value })); setError(''); };
-  const setPin = (e) => {
-    const pin = e.target.value.replace(/\D/g, '').slice(0, 6); // digits only, max 6
-    setF((x) => ({ ...x, pin }));
-    setError('');
-  };
+  
 
   const save = async () => {
     const name = f.name.trim();
     const email = f.email.trim();
     if (!name) return setError('Enter a name.');
     if (!EMAIL_RE.test(email)) return setError('Enter a valid email address.');
-    if (!PIN_RE.test(f.pin)) return setError('PIN must be 4 to 6 digits.');
-    setBusy(true);
+    if (f.pin.length < MIN_PW) return setError('Password must be at least 8 characters.');
+        setBusy(true);
     try {
       const r = await api.createStaff({ name, email, role: f.role, pin: f.pin });
       onSaved(r.data);
@@ -46,14 +43,20 @@ export default function AddStaffModal({ onClose, onSaved }) {
           <span>Role</span>
           <select value={f.role} onChange={set('role')}><option value="cashier">Cashier</option><option value="admin">Admin</option></select>
         </label>
-        <label className="field">
-          <span>PIN (4–6 digits)</span>
-          <input
-            type="password" inputMode="numeric" autoComplete="new-password" maxLength={6}
-            value={f.pin} onChange={setPin} onKeyDown={(e) => { if (e.key === 'Enter' && !busy) save(); }}
-          />
-        </label>
       </div>
+              <div className="field">
+          <label htmlFor="staffPassword"><span>Password (8+ characters)</span></label>
+          <div className="pw-wrap">
+            <input
+              id="staffPassword" type={show ? 'text' : 'password'} autoComplete="new-password" maxLength={72}
+              value={f.pin} onChange={set('pin')} onKeyDown={(e) => { if (e.key === 'Enter' && !busy) save(); }}
+            />
+            <button
+              type="button" className="pw-toggle" onClick={() => setShow((s) => !s)}
+              aria-label={show ? 'Hide password' : 'Show password'} aria-pressed={show}
+            >{show ? 'Hide' : 'Show'}</button>
+          </div>
+        </div>
       <p className="form-error" role="alert">{error}</p>
       <div className="btn-row">
         <button className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>

@@ -1,11 +1,12 @@
 import { Product } from '../models/Product.js';
 import { Order } from '../models/Order.js';
 import { nextBillNo } from '../models/Counter.js';
-import { env } from '../config/env.js';
+import { getShopSettings } from './settingsService.js';
 import { ApiError } from '../utils/ApiError.js';
 import { round2 } from '../utils/money.js';
 import { reserveStock, releaseStock, logSaleMovements } from './inventoryService.js';
 import { recordVisit } from './customerService.js';
+import { notifySale, checkStockAlerts } from './notificationService.js';
 
 /**
  * Turn a cart into a saved bill.
@@ -31,9 +32,10 @@ export async function createOrder({ customer, items, payment }, user) {
     return { product: p._id, name: p.name, price: p.price, qty, amount: round2(p.price * qty), track: p.trackStock };
   });
 
-  // 3. Totals (same maths as the original app)
+    // 3. Totals (same maths as the original app). Tax rate + currency come from the saved settings (falling back to .env).
+  const shop = await getShopSettings();
   const subtotal = round2(lines.reduce((s, l) => s + l.amount, 0));
-  const tax = round2(subtotal * env.shop.taxRate);
+  const tax = round2(subtotal * shop.taxRate);
   const total = round2(subtotal + tax);
 
   // 4. Payment checks
@@ -42,7 +44,7 @@ export async function createOrder({ customer, items, payment }, user) {
   let cardLast4 = null;
   if (payment.method === 'Cash') {
     cashReceived = payment.cashReceived ?? total; // blank = exact amount, as before
-    if (cashReceived < total) throw ApiError.badRequest(`Cash received must be at least ${env.shop.currency} ${total}.`);
+    if (cashReceived < total) throw ApiError.badRequest(`Cash received must be at least ${shop.currency} ${total}.`);
     change = round2(cashReceived - total);
   } else {
     cardLast4 = payment.cardLast4 || null;
@@ -59,7 +61,7 @@ export async function createOrder({ customer, items, payment }, user) {
       customer: { name: customer.name, phone: customer.phone },
       items: lines.map(({ product, name, price, qty, amount }) => ({ product, name, price, qty, amount })),
       subtotal,
-      taxRate: env.shop.taxRate,
+      taxRate: shop.taxRate, // saved on the bill: old bills keep the rate they were made with
       tax,
       total,
       method: payment.method,
@@ -80,7 +82,11 @@ export async function createOrder({ customer, items, payment }, user) {
     await order.save();
     await logSaleMovements(reserved, order.billNo, user?.email || '');
   } catch (err) {
-    console.error(`[orders] ${order.billNo} saved, but follow-up bookkeeping failed:`, err);
+       console.error(`[orders] ${order.billNo} saved, but follow-up bookkeeping failed:`, err);
   }
+
+  // 7. Alerts: a "sale completed" alert, then low / out-of-stock alerts for what was sold. These never throw and never undo the sale.
+  await notifySale(order, shop, user);
+  await checkStockAlerts(reserved.map(({ line }) => line.product));
   return order;
 }

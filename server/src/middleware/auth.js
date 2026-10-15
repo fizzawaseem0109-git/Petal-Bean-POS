@@ -21,7 +21,7 @@ export async function requireAuth(req, _res, next) {
   const user = await User.findById(payload.sub);
   if (!user) throw ApiError.unauthorized('Your session is no longer valid. Please log in again.');
     if (user.active === false) throw ApiError.unauthorized('Your account has been disabled. Please ask an admin.');
-    if ((payload.ver ?? 0) !== (user.tokenVersion ?? 0)) throw ApiError.unauthorized('Your PIN was changed. Please log in again.');
+    if ((payload.ver ?? 0) !== (user.tokenVersion ?? 0)) throw ApiError.unauthorized('Your password was changed. Please log in again.');
   req.user = user;
   next();
 }

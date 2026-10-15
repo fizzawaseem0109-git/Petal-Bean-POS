@@ -58,7 +58,7 @@ export default function StaffView() {
                       <span className="muted">You</span>
                     ) : (
                       <div style={{ display: 'flex', gap: 8 }}>
-                        <button className="btn btn-sm btn-ghost" onClick={() => setResetFor(s)}>Reset PIN</button>
+                        <button className="btn btn-sm btn-ghost" onClick={() => setResetFor(s)}>Reset password</button>
                         <button className={`btn btn-sm ${s.active ? 'btn-ghost' : 'btn-mint'}`} onClick={() => setTarget(s)}>
                           {s.active ? 'Disable' : 'Re-enable'}
                         </button>
@@ -99,7 +99,7 @@ export default function StaffView() {
         <ResetPinModal
           staff={resetFor}
           onClose={() => setResetFor(null)}
-          onDone={(u) => { setResetFor(null); toast(`PIN reset for ${u.name || u.email}`); load(); }}
+          onDone={(u) => { setResetFor(null); toast(`Password reset for ${u.name || u.email}`); load(); }}
         />
       )}
     </section>
@@ -134,7 +134,7 @@ function StatusConfirm({ staff, onClose, onDone }) {
           <strong>{disabling ? 'They will be locked out.' : 'They will be able to log in again.'}</strong>
           <p>{disabling
             ? 'They can no longer log in, and anyone using this account is signed out. Their past bills stay in the history.'
-            : 'They can log in again with their current PIN.'}</p>
+            : 'They can log in again with their current password.'}</p>
         </div>
       </div>
       <p className="form-error" role="alert">{error}</p>
@@ -148,20 +148,19 @@ function StatusConfirm({ staff, onClose, onDone }) {
   );
 }
 
-
 function ResetPinModal({ staff, onClose, onDone }) {
-  const [pin, setPin] = useState('');
+  const [pw, setPw] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const digits = (set) => (e) => { set(e.target.value.replace(/\D/g, '').slice(0, 6)); setError(''); };
 
   const run = async () => {
-    if (!/^\d{4,6}$/.test(pin)) return setError('PIN must be 4 to 6 digits.');
-    if (pin !== confirm) return setError('The two PINs do not match.');
+    if (pw.length < 8) return setError('Password must be at least 8 characters.');
+    if (pw !== confirm) return setError('The two passwords do not match.');
     setBusy(true);
     try {
-      const r = await api.resetStaffPin(staff.id, pin);
+      const r = await api.resetStaffPin(staff.id, pw); // the API field is still called "pin"
       onDone(r.data);
     } catch (e) {
       setError(e.message);
@@ -169,10 +168,12 @@ function ResetPinModal({ staff, onClose, onDone }) {
     }
   };
 
+  const type = show ? 'text' : 'password';
+
   return (
     <Modal onClose={busy ? () => {} : onClose} labelledBy="resetPinTitle" describedBy="resetPinNote">
       <div className="modal-head">
-        <h3 id="resetPinTitle">Reset PIN</h3>
+        <h3 id="resetPinTitle">Reset password</h3>
         <button className="modal-x" aria-label="Close" onClick={onClose} disabled={busy}>✕</button>
       </div>
       <p className="logout-user"><strong>{staff.name || staff.email}</strong><br />{staff.email}</p>
@@ -180,26 +181,34 @@ function ResetPinModal({ staff, onClose, onDone }) {
         <span className="danger-ico" aria-hidden="true">⚠️</span>
         <div>
           <strong>They will be signed out.</strong>
-          <p>Their old PIN stops working straight away, and any device using this account is logged out. Tell them the new PIN in person.</p>
+          <p>Their old password stops working straight away, and any device using this account is logged out. Tell them the new password in person.</p>
         </div>
       </div>
-      <div className="field-row">
-        <label className="field">
-          <span>New PIN (4–6 digits)</span>
-          <input autoFocus type="password" inputMode="numeric" autoComplete="new-password" maxLength={6} value={pin} onChange={digits(setPin)} />
-        </label>
-        <label className="field">
-          <span>Confirm new PIN</span>
+      <div className="field">
+        <label htmlFor="resetPassword"><span>New password (8+ characters)</span></label>
+        <div className="pw-wrap">
           <input
-            type="password" inputMode="numeric" autoComplete="new-password" maxLength={6}
-            value={confirm} onChange={digits(setConfirm)} onKeyDown={(e) => { if (e.key === 'Enter' && !busy) run(); }}
+            id="resetPassword" autoFocus type={type} autoComplete="new-password" maxLength={72}
+            value={pw} onChange={(e) => { setPw(e.target.value); setError(''); }}
           />
-        </label>
+          <button
+            type="button" className="pw-toggle" onClick={() => setShow((s) => !s)}
+            aria-label={show ? 'Hide password' : 'Show password'} aria-pressed={show}
+          >{show ? 'Hide' : 'Show'}</button>
+        </div>
       </div>
+      <label className="field">
+        <span>Confirm new password</span>
+        <input
+          type={type} autoComplete="new-password" maxLength={72}
+          value={confirm} onChange={(e) => { setConfirm(e.target.value); setError(''); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !busy) run(); }}
+        />
+      </label>
       <p className="form-error" role="alert">{error}</p>
       <div className="btn-row">
         <button className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
-        <button className="btn btn-primary" onClick={run} disabled={busy}>{busy ? 'Saving…' : 'Reset PIN'}</button>
+        <button className="btn btn-primary" onClick={run} disabled={busy}>{busy ? 'Saving…' : 'Reset password'}</button>
       </div>
     </Modal>
   );

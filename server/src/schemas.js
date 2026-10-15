@@ -7,22 +7,26 @@ const flag = z.enum(['1', 'true', '0', 'false']).transform((v) => v === '1' || v
 
 export const loginSchema = z.object({
   email: z.string().trim().min(1, 'Enter your email first.'),
-  pin: z.string().regex(/^\d{4,6}$/, 'Enter your PIN (4 to 6 digits).'),
+    pin: z.string({ error: 'Enter your password.' }).min(1, 'Enter your password.').max(72, 'Enter your password.'), // field is still named "pin" in the API; it now carries a password (old PINs keep working until changed)
 });
 
-// ---- staff & PINs
-const PIN_ERR = 'PIN must be 4 to 6 digits.';
-const isEasyPin = (p) => {
-  if (/^(\d)\1+$/.test(p)) return true; // 1111, 000000
-  const d = [...p].map(Number);
-  const step = d[1] - d[0];
-  if ((step === 1 || step === -1) && d.every((x, i) => i === 0 || x - d[i - 1] === step)) return true; // 1234, 4321
-  return ['2580', '0852'].includes(p); // straight down the keypad (and the old default PIN)
+// ---- staff & passwords (API fields stay named pin / currentPin / newPin; they now carry passwords)
+const PASSWORD_ERR = 'Password must be 8 to 72 characters.';
+const COMMON = new Set(['password', 'password1', 'password123', 'qwertyui', 'qwerty123', '12345678', '123456789', '1234567890', 'iloveyou', 'admin123', 'welcome1', 'letmein1', 'cafe1234']);
+const isEasyPassword = (p) => {
+  const s = p.toLowerCase();
+  if (COMMON.has(s)) return true;
+  if (/^(.)\1+$/.test(s)) return true; // aaaaaaaa, 11111111
+  const codes = [...s].map((c) => c.charCodeAt(0));
+  const step = codes[1] - codes[0];
+  return (step === 1 || step === -1) && codes.every((c, i) => i === 0 || c - codes[i - 1] === step); // abcdefgh, 87654321
 };
 export const newPin = z
-  .string({ error: PIN_ERR })
-  .regex(/^\d{4,6}$/, PIN_ERR)
-  .refine((p) => !isEasyPin(p), 'That PIN is too easy to guess. Avoid repeated or sequential digits (like 1111 or 1234).');
+  .string({ error: PASSWORD_ERR })
+  .min(8, PASSWORD_ERR)
+  .max(72, PASSWORD_ERR) // bcrypt only uses the first 72 bytes
+  .refine((p) => !isEasyPassword(p), 'That password is too easy to guess. Avoid common passwords and repeated or sequential characters.');
+
 
 const staffRole = z.enum(['admin', 'cashier']);
 export const createStaffSchema = z.object({
@@ -36,8 +40,7 @@ export const updateStaffSchema = z
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update.');
 export const resetPinSchema = z.object({ pin: newPin });
 export const changePinSchema = z.object({
-  currentPin: z.string({ error: 'Enter your current PIN.' }).regex(/^\d{4,6}$/, 'Enter your current PIN.'),
-  newPin,
+  currentPin: z.string({ error: 'Enter your current password.' }).min(1, 'Enter your current password.').max(72, 'Enter your current password.'),  newPin,
 });
 
 const phone = z
@@ -83,6 +86,20 @@ export const listOrdersQuery = z.object({
 
 export const summaryQuery = z.object({ from: z.coerce.date().optional(), to: z.coerce.date().optional() });
 
+ 
+// ---- staff performance report (admin only)
+const fromBeforeTo = [(q) => !q.from || !q.to || q.from <= q.to, 'The start date must be on or before the end date.'];
+export const staffReportQuery = z.object({ from: z.coerce.date().optional(), to: z.coerce.date().optional() }).refine(...fromBeforeTo);
+export const staffSalesQuery = z
+  .object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(25),
+    from: z.coerce.date().optional(),
+    to: z.coerce.date().optional(),
+  })
+  .refine(...fromBeforeTo);
+
+
 export const listCustomersQuery = z.object({
   search: z.string().trim().max(80).optional(),
   limit: z.coerce.number().int().min(1).max(5000).default(1000),
@@ -118,6 +135,22 @@ export const updateProductSchema = z
   .partial()
   .refine((o) => Object.keys(o).length > 0, 'Nothing to update.');
 
+  // ---- café settings (admin only). Send only the fields you want to change.
+// taxRate is a fraction like the rest of the app: 0.05 = 5 %. The settings screen converts from/to percent.
+export const updateSettingsSchema = z
+  .object({
+    shopName: trimmed('Café name', 60).optional(),
+    shopAddress: z.string().trim().max(120, 'Address is too long (120 characters max).').optional(),
+    shopPhone: z.string().trim().max(30, 'Phone number is too long.').optional(),
+    currency: trimmed('Currency', 8).optional(),
+    taxRate: z
+      .number({ error: 'Tax must be a number.' })
+      .min(0, 'Tax cannot be negative.')
+      .max(1, 'Tax cannot be more than 100%.')
+      .transform((v) => Math.round(v * 10000) / 10000) // at most 2 decimals of a percent (8.25 %)
+      .optional(),
+  })
+  .refine((o) => Object.keys(o).length > 0, 'Nothing to update.');
 export const idParams = z.object({ id: objectId });
 
 export const adjustStockSchema = z
@@ -132,4 +165,8 @@ export const adjustStockSchema = z
 export const movementsQuery = z.object({
   productId: objectId.optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
+export const listNotificationsQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(30),
 });
